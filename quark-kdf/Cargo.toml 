@@ -1,0 +1,19 @@
+[package]
+name = "skhoron-quark-kdf"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Argon2id + HKDF domain-separated key derivation for skhoron-quark"
+repository = "https://github.com/Skhoron/skhoron-quark"
+
+[dependencies]
+argon2 = "0.5"
+password-hash = "0.5"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+zeroize = "1.7"
+thiserror = "1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
