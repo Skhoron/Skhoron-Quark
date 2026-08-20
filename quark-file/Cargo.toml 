@@ -1,0 +1,22 @@
+[package]
+name = "skhoron-quark-file"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "CLI file encryption/decryption using the experimental Skhoron-Quark cipher — NOT for real secrets"
+repository = "https://github.com/Skhoron/skhoron-quark"
+
+[dependencies]
+skhoron-quark-aead = { path = "../quark-aead" }
+skhoron-quark-kdf = { path = "../quark-kdf" }
+rand = "0.8"
+clap = { version = "4.5", features = ["derive"] }
+rpassword = "7.3"
+zeroize = "1.7"
+thiserror = "1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+overflow-checks = true
