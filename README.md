@@ -29,6 +29,8 @@ ARX-based (Addition-Rotation-XOR) экспериментальный блочн�
 
 ### Шифрование файла через CLI
 
+## main
+
 ```bash
 cargo run --release -p skhoron-quark-file -- encrypt secret.txt secret.txt.skhq
 cargo run --release -p skhoron-quark-file -- decrypt secret.txt.skhq secret_restored.txt
