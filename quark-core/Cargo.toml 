@@ -1,0 +1,14 @@
+[package]
+name = "skhoron-quark-core"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Experimental ARX block cipher (256-bit) — research project, NOT for production use"
+repository = "https://github.com/Skhoron/skhoron-quark"
+
+[dependencies]
+zeroize = { version = "1.7", features = ["derive"] }
+thiserror = "1.0"
+
+[lints.rust]
+unsafe_code = "forbid"
