@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "quark-core",
+    "quark-aead",
+    "quark-kdf",
+    "quark-keygen",
+    "quark-integration-tests",
+    "quark-file",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/Skhoron/skhoron-quark"
