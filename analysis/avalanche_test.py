@@ -64,14 +64,10 @@ def expand_key(master_key):
     state = master_key[:]
     c = KEY_SCHEDULE_INCREMENT
     round_keys = []
-    for r in range(ROUNDS + 1):
-        rk = [0] * WORDS
-        for j in range(WORDS):
-            rot = ROTATIONS[(j + r) % WORDS]
-            rk[j] = (rotl32(state[j], rot) ^ ((c * (j + 1)) & MASK32)) & MASK32
-        round_keys.append(rk)
-        for j in range(WORDS):
-            state[j] = rotl32((state[j] + c) & MASK32, ROTATIONS[j])
+    for _ in range(ROUNDS + 1):
+        state = [state[j] ^ ((c * (j + 1)) & MASK32) for j in range(WORDS)]
+        state = forward_round(state)
+        round_keys.append(state[:])
         c = (c + KEY_SCHEDULE_INCREMENT) & MASK32
     return round_keys
 
