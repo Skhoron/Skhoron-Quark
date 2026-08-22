@@ -221,12 +221,18 @@ pub fn generate_password(length: usize, alphabet: &str, exclude_ambiguous: bool)
     }
 
     let n = chars.len() as u32;
-    let limit = u32::MAX - (u32::MAX % n);
+    let range: u64 = 1u64 << 32;
+    let limit = (range - (range % n as u64)) as u32;
 
     let mut rng = OsRng;
     let mut password = String::with_capacity(length);
+    let mut inserted = 0usize; // счётчик СИМВОЛОВ, не байт (см. generator.rs
+                                // в skhoron-passgen — тот же класс бага был
+                                // там: String::len() считает байты, а для
+                                // произвольного не-ASCII алфавита это дало бы
+                                // пароль короче ожидаемой длины в символах)
 
-    while password.len() < length {
+    while inserted < length {
         let mut buf = [0u8; 4];
         rng.fill_bytes(&mut buf);
         let val = u32::from_le_bytes(buf);
@@ -237,6 +243,7 @@ pub fn generate_password(length: usize, alphabet: &str, exclude_ambiguous: bool)
         }
         let idx = (val % n) as usize;
         password.push(chars[idx]);
+        inserted += 1;
     }
 
     Ok(password)
