@@ -8,7 +8,6 @@ repository = "https://github.com/Skhoron/skhoron-quark"
 
 [dependencies]
 zeroize = { version = "1.7", features = ["derive"] }
-thiserror = "1.0"
 
 [lints.rust]
 unsafe_code = "forbid"
