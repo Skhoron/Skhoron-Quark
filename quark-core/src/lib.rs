@@ -32,9 +32,7 @@
 
 pub mod block;
 pub mod constants;
-pub mod error;
 pub mod key_schedule;
 pub mod round;
 
 pub use block::{QuarkKey, BLOCK_SIZE_BYTES};
-pub use error::QuarkCoreError;
