@@ -20,6 +20,11 @@ pub const VERSION: u8 = 0x01;
 pub const SALT_LEN: usize = 16;
 pub const NONCE_LEN: usize = 24;
 pub const HEADER_LEN: usize = 4 + 1 + SALT_LEN + NONCE_LEN;
+/// Длина MAC-тега (BLAKE3 keyed hash, см. `quark-aead`). Дублируется здесь
+/// (не импортируется из quark-aead, где это приватная константа) —
+/// используется только для ранней валидации длины тела файла на уровне
+/// формата, а не для крипто-операций.
+const MAC_LEN: usize = 32;
 
 #[derive(Debug, Error)]
 pub enum FormatError {
@@ -29,12 +34,22 @@ pub enum FormatError {
     InvalidMagic,
     #[error("unsupported format version: {0}")]
     UnsupportedVersion(u8),
+    #[error("file body ({0} bytes) is shorter than the minimum possible ciphertext+MAC tag ({MAC_LEN} bytes) — file is truncated or corrupted")]
+    BodyTooShort(usize),
 }
 
 pub struct ParsedHeader<'a> {
     pub salt: &'a [u8],
     pub nonce: [u8; NONCE_LEN],
     pub ciphertext_and_tag: &'a [u8],
+    /// Байты заголовка (magic+version+salt+nonce) — используются как
+    /// associated data при AEAD, чтобы magic/version/salt были
+    /// криптографически привязаны к шифротексту (см. header_bytes ниже
+    /// и правку в main.rs — раньше AAD была пустой, и заголовок можно
+    /// было подменить без падения аутентификации, хотя изменение magic/
+    /// version и так ловилось парсером формата, отдельной атаки это не
+    /// давало, но привязка через AAD — более строгая гарантия целостности).
+    pub header_bytes: &'a [u8],
 }
 
 /// Собирает заголовок + шифротекст в один буфер для записи на диск.
@@ -68,11 +83,16 @@ pub fn parse_file(data: &[u8]) -> Result<ParsedHeader<'_>, FormatError> {
     nonce.copy_from_slice(&data[nonce_start..nonce_end]);
 
     let ciphertext_and_tag = &data[nonce_end..];
+    if ciphertext_and_tag.len() < MAC_LEN {
+        return Err(FormatError::BodyTooShort(ciphertext_and_tag.len()));
+    }
+    let header_bytes = &data[0..nonce_end];
 
     Ok(ParsedHeader {
         salt,
         nonce,
         ciphertext_and_tag,
+        header_bytes,
     })
 }
 
@@ -92,6 +112,8 @@ mod tests {
         assert_eq!(parsed.salt, &salt);
         assert_eq!(parsed.nonce, nonce);
         assert_eq!(parsed.ciphertext_and_tag, body);
+        assert_eq!(parsed.header_bytes.len(), HEADER_LEN);
+        assert_eq!(&parsed.header_bytes[0..4], MAGIC);
     }
 
     #[test]
@@ -104,5 +126,43 @@ mod tests {
     #[test]
     fn rejects_too_short() {
         assert!(matches!(parse_file(b"short"), Err(FormatError::TooShort)));
+    }
+
+    #[test]
+    fn rejects_body_shorter_than_mac_len() {
+        // Регрессия на #6 из ревью: раньше parse_file() не проверял, что
+        // тело после заголовка достаточно длинное для валидного MAC-тега —
+        // ошибка ловилась только позже, внутри quark-aead::decrypt.
+        // Теперь формат отклоняет заведомо повреждённый контейнер раньше.
+        let file_bytes = build_file(&[0u8; SALT_LEN], &[0u8; NONCE_LEN], b"short_body");
+        let result = parse_file(&file_bytes);
+        assert!(matches!(result, Err(FormatError::BodyTooShort(_))));
+    }
+
+    #[test]
+    fn accepts_body_exactly_mac_len() {
+        // Граничный случай: тело ровно MAC_LEN байт (пустой ciphertext,
+        // только tag) — валидный минимальный контейнер, должен парситься.
+        let body = vec![0u8; MAC_LEN];
+        let file_bytes = build_file(&[0u8; SALT_LEN], &[0u8; NONCE_LEN], &body);
+        assert!(parse_file(&file_bytes).is_ok());
+    }
+
+    #[test]
+    fn rejects_unsupported_version() {
+        let mut file_bytes = build_file(&[0u8; SALT_LEN], &[0u8; NONCE_LEN], &vec![0u8; MAC_LEN]);
+        file_bytes[4] = 0xFF; // versiоn byte
+        assert!(matches!(parse_file(&file_bytes), Err(FormatError::UnsupportedVersion(0xFF))));
+    }
+
+    #[test]
+    fn header_bytes_change_when_salt_or_nonce_changes() {
+        // header_bytes используется как AAD в quark-file — проверяем, что
+        // он реально зависит от salt/nonce (а не случайно фиксирован).
+        let file_a = build_file(&[0x01u8; SALT_LEN], &[0x02u8; NONCE_LEN], &vec![0u8; MAC_LEN]);
+        let file_b = build_file(&[0x03u8; SALT_LEN], &[0x02u8; NONCE_LEN], &vec![0u8; MAC_LEN]);
+        let parsed_a = parse_file(&file_a).unwrap();
+        let parsed_b = parse_file(&file_b).unwrap();
+        assert_ne!(parsed_a.header_bytes, parsed_b.header_bytes);
     }
 }
