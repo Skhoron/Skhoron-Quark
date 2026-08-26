@@ -30,8 +30,8 @@ fn full_pipeline_password_to_encrypted_message() {
     let nonce = generate_nonce();
     let plaintext = b"integration test across the full Skhoron-Quark pipeline";
 
-    let ciphertext = aead.encrypt(&nonce, plaintext, b"");
-    let decrypted = aead.decrypt(&nonce, &ciphertext, b"").unwrap();
+    let ciphertext = aead.encrypt_with_nonce(&nonce, plaintext, b"").unwrap();
+    let decrypted = aead.decrypt_with_nonce(&nonce, &ciphertext, b"").unwrap();
 
     assert_eq!(decrypted, plaintext);
 }
