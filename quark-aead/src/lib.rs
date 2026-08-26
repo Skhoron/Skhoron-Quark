@@ -62,17 +62,28 @@ pub enum QuarkAeadError {
 /// Аутентифицированный шифр Skhoron-Quark.
 pub struct QuarkAead {
     enc_key: QuarkKey,
-    mac_key: [u8; 32],
+    /// Обёрнут в `Zeroizing` (было исправлено — раньше был обычный
+    /// `[u8; 32]` с ручным zeroize только в `Drop` этой структуры).
+    /// `Zeroizing` даёт ту же гарантию декларативно на уровне типа —
+    /// защита от будущего рефакторинга, который может случайно убрать
+    /// или сломать ручную реализацию `Drop`.
+    mac_key: Zeroizing<[u8; 32]>,
 }
 
 impl QuarkAead {
-    pub fn new(master_key: [u8; 32]) -> Self {
+    pub fn new(mut master_key: [u8; 32]) -> Self {
         let enc_key_bytes: [u8; 32] = blake3::derive_key("skhoron-quark-aead:encryption-key-v1", &master_key);
         let mac_key: [u8; 32] = blake3::derive_key("skhoron-quark-aead:mac-key-v1", &master_key);
 
+        // Явный zeroize входного master_key (было исправлено — раньше
+        // параметр функции не зачищался явно и полагался на то, что
+        // стековая память будет переиспользована естественным образом,
+        // без явной гарантии).
+        master_key.zeroize();
+
         Self {
             enc_key: QuarkKey::new(enc_key_bytes),
-            mac_key,
+            mac_key: Zeroizing::new(mac_key),
         }
     }
 
@@ -184,11 +195,10 @@ impl QuarkAead {
     }
 }
 
-impl Drop for QuarkAead {
-    fn drop(&mut self) {
-        self.mac_key.zeroize();
-    }
-}
+// Ручной `impl Drop` больше не нужен — `Zeroizing<[u8; 32]>` уже
+// зануляет память самостоятельно при выходе `mac_key` из scope
+// (было исправлено — раньше был ручной Drop, дублирующий то, что теперь
+// гарантирует сам тип).
 
 /// Плейнтекст/шифротекст, автоматически зануляемый при выходе из scope.
 /// Вспомогательный тип для вызывающего кода, который хочет гарантировать
@@ -273,5 +283,47 @@ mod tests {
         let (nonce_a, _) = aead.encrypt(b"message one", b"");
         let (nonce_b, _) = aead.encrypt(b"message two", b"");
         assert_ne!(nonce_a, nonce_b);
+    }
+
+    #[test]
+    fn bit_flip_in_nonce_fails_authentication() {
+        // Регрессия на #11 из ревью: hostile-input тест на nonce.
+        let aead = QuarkAead::new([0x33; 32]);
+        let (mut nonce, ciphertext) = aead.encrypt(b"data", b"");
+        nonce[0] ^= 0x01;
+        let result = aead.decrypt(&nonce, &ciphertext, b"");
+        assert!(matches!(result, Err(QuarkAeadError::AuthenticationFailed)));
+    }
+
+    #[test]
+    fn truncated_ciphertext_at_various_lengths_never_panics() {
+        // Регрессия на #11: усечение на каждой длине не должно паниковать,
+        // только возвращать ошибку.
+        let aead = QuarkAead::new([0x44; 32]);
+        let (nonce, ciphertext) = aead.encrypt(b"some plaintext data for truncation testing", b"");
+
+        for len in 0..ciphertext.len() {
+            let truncated = &ciphertext[..len];
+            let result = aead.decrypt(&nonce, truncated, b"");
+            assert!(result.is_err(), "truncated ciphertext of length {len} must not decrypt successfully");
+        }
+    }
+
+    #[test]
+    fn empty_ciphertext_is_rejected_not_panicking() {
+        let aead = QuarkAead::new([0x55; 32]);
+        let nonce = generate_nonce();
+        let result = aead.decrypt(&nonce, b"", b"");
+        assert!(matches!(result, Err(QuarkAeadError::CiphertextTooShort)));
+    }
+
+    #[test]
+    fn bit_flip_in_mac_tag_fails_authentication() {
+        let aead = QuarkAead::new([0x66; 32]);
+        let (nonce, mut ciphertext) = aead.encrypt(b"data", b"");
+        let last = ciphertext.len() - 1;
+        ciphertext[last] ^= 0x01;
+        let result = aead.decrypt(&nonce, &ciphertext, b"");
+        assert!(matches!(result, Err(QuarkAeadError::AuthenticationFailed)));
     }
 }
