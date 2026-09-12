@@ -1,20 +1,49 @@
 impl QuarkKey {
-    /// Создаёт ключ из произвольного байтового среза.
+    /// Шифрует один блок из произвольного byte slice.
     ///
     /// Требуется ровно 32 байта.
-    pub fn try_new(key_bytes: &[u8]) -> Result<Self, QuarkCoreError> {
-        if key_bytes.len() != BLOCK_SIZE_BYTES {
-            return Err(QuarkCoreError::InvalidKeyLength(key_bytes.len()));
+    pub fn try_encrypt_block(
+        &self,
+        plaintext: &[u8],
+    ) -> Result<[u8; BLOCK_SIZE_BYTES], QuarkCoreError> {
+        if plaintext.len() != BLOCK_SIZE_BYTES {
+            return Err(QuarkCoreError::InvalidBlockLength(
+                plaintext.len(),
+            ));
         }
 
-        let mut fixed_key = [0u8; BLOCK_SIZE_BYTES];
+        let mut block = [0u8; BLOCK_SIZE_BYTES];
 
-        fixed_key.copy_from_slice(key_bytes);
+        block.copy_from_slice(plaintext);
 
-        let key = Self::new(fixed_key);
+        let ciphertext = self.encrypt_block(&block);
 
-        fixed_key.zeroize();
+        block.zeroize();
 
-        Ok(key)
+        Ok(ciphertext)
+    }
+
+    /// Расшифровывает один блок из произвольного byte slice.
+    ///
+    /// Требуется ровно 32 байта.
+    pub fn try_decrypt_block(
+        &self,
+        ciphertext: &[u8],
+    ) -> Result<[u8; BLOCK_SIZE_BYTES], QuarkCoreError> {
+        if ciphertext.len() != BLOCK_SIZE_BYTES {
+            return Err(QuarkCoreError::InvalidBlockLength(
+                ciphertext.len(),
+            ));
+        }
+
+        let mut block = [0u8; BLOCK_SIZE_BYTES];
+
+        block.copy_from_slice(ciphertext);
+
+        let plaintext = self.decrypt_block(&block);
+
+        block.zeroize();
+
+        Ok(plaintext)
     }
 }
