@@ -3,10 +3,11 @@ name = "skhoron-quark-core"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Experimental ARX block cipher (256-bit) — research project, NOT for production use"
+description = "Experimental ARX block cipher (256-bit) — research project"
 repository = "https://github.com/Skhoron/skhoron-quark"
 
 [dependencies]
+thiserror = "1.0"
 zeroize = { version = "1.7", features = ["derive"] }
 
 [lints.rust]
